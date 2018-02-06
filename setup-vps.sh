@@ -55,11 +55,33 @@ check() {
   fi
 }
 
+# Read a number, ensuring it is in a range 
+# Usage: checkint N MIN [MAX]
+checkint() {
+  n=$1
+  min=$2
+  max=$3
+
+  if [[ -n "$max" ]]; then
+    (( n>=min && n<=max )) && return 0
+  else
+    (( n>=min )) && return 0
+  fi
+  return 1 # Did not pass tests
+}
+
+# Exit with a fatal error
+fatal() {
+  echo "$@" >&2
+  exit 1
+}
+
 
 # Configures from user settings
 # Variables
 # $user - Username of new user to create
 # $pass - Password for new user
+# $ssh_port - Port to run ssh server on
 
 # Boolean flags - any length >0 is true
 # $copy_root_ssh - Copy ssh authorized keys from root
@@ -70,10 +92,18 @@ configure() {
   echo "Configuration options. Press Enter to use defaults"
   read -e -p "Username of new user: " -i "user" user
   read -e -p "Password of new user: " -i "$pass" pass
+  read -e -p "SSH Server Port: " -i "2022" ssh_port
 
   confirm "Copy ssh key from root?" && copy_root_ssh=1
 
+  check_config
+
   echo "Configuration complete. The script will now run automatically"
+}
+
+# Validate user input variables
+check_config() {
+  checkint $ssh_port 1 65535 || fatal "Invalid ssh port: ${ssh_port}"
 }
 
 # Installs base apt packages
@@ -88,9 +118,15 @@ install_additional_packages() {
 }
 
 
+# Configure ssh, such as changing default port
+configure_ssh() {
+  # Change SSH port
+  echo sed -i 's/^#?Port .*/Port '"${ssh_port}/" /etc/ssh/sshd_config
+}
+
 # Sets up ufw firewall
 setup_firewall() {
-  ufw allow ssh
+  ufw allow "$ssh_port"
   ufw enable --force
 }
 
@@ -119,7 +155,10 @@ create_login_user() {
 
 precheck
 configure
+
 install_base_packages
 install_additional_packages
+configure_ssh
 setup_firewall
 create_login_user
+
