@@ -121,7 +121,18 @@ install_additional_packages() {
 # Configure ssh, such as changing default port
 configure_ssh() {
   # Change SSH port
-  sed -i 's/^#?Port .*/Port '"${ssh_port}/" /etc/ssh/sshd_config
+  sed -E -i "s/^#?Port .*/Port ${ssh_port}/" /etc/ssh/sshd_config
+  # Set secure SSH Defaults
+  sed -E -i 's/^#?X11Forwarding .*/X11Forwarding no/' /etc/ssh/sshd_config
+
+  # If user has SSH keys, disable password auth
+  # DANGEROUS!!
+  if [[ -s "${HOME}/.ssh/authorized_keys" ]];then
+    sed -E -i 's/^#?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
+  fi
+
+
+  systemctl restart ssh
 }
 
 # Sets up ufw firewall
