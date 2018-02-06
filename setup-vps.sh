@@ -121,7 +121,7 @@ install_additional_packages() {
 # Configure ssh, such as changing default port
 configure_ssh() {
   # Change SSH port
-  echo sed -i 's/^#?Port .*/Port '"${ssh_port}/" /etc/ssh/sshd_config
+  sed -i 's/^#?Port .*/Port '"${ssh_port}/" /etc/ssh/sshd_config
 }
 
 # Sets up ufw firewall
