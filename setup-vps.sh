@@ -127,11 +127,11 @@ check_config() {
 install_base_packages() {
   apt-get -y update
   apt-get -y upgrade
-  apt-get -y install sudo git ufw build-essential
+  apt-get -y install sudo git ufw ntp ca-certificates build-essential
 }
 
 install_additional_packages() {
-  apt-get -y install vim tmux bash-completion tree 
+  apt-get -y install vim tmux bash-completion tree wget curl
 }
 
 
