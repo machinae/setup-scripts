@@ -144,6 +144,7 @@ setup_firewall() {
 # Create a new user with a login shell
 create_login_user() {
   adduser --disabled-password --gecos "" "${user}"
+  usermod -aG adm,sudo "${user}"
   echo "${user}:${pass}" | chpasswd
   mkdir -p "/home/${user}/.ssh"
 
