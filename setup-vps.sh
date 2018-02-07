@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # Script to set up a basic Debian VPS
 
+# Globals
+# Colots
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+# End Globals
+
 # Check condtions to run script
 precheck() {
   if [[ $EUID -ne 0 ]]; then
@@ -72,8 +80,13 @@ checkint() {
 
 # Exit with a fatal error
 fatal() {
-  echo "$@" >&2
+  printf "${RED}ERROR:${NC} ${@}\n" >&2
   exit 1
+}
+
+# Print a warning
+warn() {
+  printf "${YELLOW}WARNING:${NC} ${@}\n" >&2
 }
 
 
@@ -85,13 +98,14 @@ fatal() {
 
 # Boolean flags - any length >0 is true
 # $copy_root_ssh - Copy ssh authorized keys from root
+# $nopasswd - Passwordless(ssh key only) login and sudo
 configure() {
   # Random default password
-  pass=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 10)
+  #pass=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 10)
 
   echo "Configuration options. Press Enter to use defaults"
   read -e -p "Username of new user: " -i "user" user
-  read -e -p "Password of new user: " -i "$pass" pass
+  read -e -p "Password of new user(leave blank for passwordless): " pass
   read -e -p "SSH Server Port: " -i "2022" ssh_port
 
   confirm "Copy ssh key from root?" && copy_root_ssh=1
@@ -104,6 +118,9 @@ configure() {
 # Validate user input variables
 check_config() {
   checkint $ssh_port 1 65535 || fatal "Invalid ssh port: ${ssh_port}"
+  if [[ -z "$pass" ]];then
+    nopasswd=1
+  fi
 }
 
 # Installs base apt packages
@@ -127,12 +144,30 @@ configure_ssh() {
 
   # If user has SSH keys, disable password auth
   # DANGEROUS!!
-  if [[ -s "${HOME}/.ssh/authorized_keys" ]];then
+  if [[ -n "$nopasswd" ]];then
     sed -E -i 's/^#?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
   fi
 
 
   systemctl restart ssh
+}
+
+# Configure sudoers to default user
+configure_sudo() {
+  local f
+  f="/etc/sudoers.d/10-defaults"
+  # Disable sudo lecture
+  echo 'Defaults lecture="never"' >> "$f"
+  # 1 hour password timeout after sudo
+  echo 'Defaults timestamp_timeout=60' >> "$f"
+  chmod 440 "$f"
+
+  #Passwordless sudo for user
+  if [[ -n "$nopasswd" ]];then
+    f="/etc/sudoers.d/90-default-user"
+    echo "${user} ALL=(ALL) NOPASSWD:ALL" >>"$f"
+    chmod 440 "$f"
+  fi
 }
 
 # Sets up ufw firewall
@@ -163,6 +198,15 @@ create_login_user() {
   chown -R "${user}:${user}"  "/home/${user}"
 }
 
+# Show config status
+checkstatus() {
+  if [[ -n "$nopasswd" && ! -s "/home/${user}/.ssh/authorized_keys" ]]; then
+    warn "Passwordless mode enabled, but ${user} has no ssh keys!" 
+    echo "Make sure to add at least one key to /home/${user}/authorized_keys"
+  fi
+  echo -e "${GREEN}Setup completed!${NC}"
+}
+
 #BEGIN
 
 precheck
@@ -173,4 +217,6 @@ install_additional_packages
 configure_ssh
 setup_firewall
 create_login_user
+configure_sudo
 
+checkstatus
