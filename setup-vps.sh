@@ -176,11 +176,50 @@ setup_firewall() {
   ufw enable --force
 }
 
+# Set up swap file equal to RAM
+setup_swap() {
+  local swapfile swapsize diskspace
+  swapfile="/swapfile"
+  # Swap size in bytes
+  swapsize=$(swapon --bytes --noheadings --show=SIZE|head -n1)
+  # Available disk space in bytes
+  diskspace=$(df --output=avail /|tail -n1)
+  # Return if swap already exits
+  if [[ "$swapsize" > 0 ]];then
+    return
+  fi
+
+  # Set swap size to available memory
+  swapsize=$(free -b |awk '/Mem/ {print $2}')
+
+  # Sanity check for swap size
+  if [[ "$swapsize" > "$diskspace" ]];then
+    fatal "Swap file size too big: ${swapsize} bytes"
+  fi
+
+  fallocate -l "$swapsize" "$swapfile"
+  chmod 600 "$swapfile"
+
+  mkswap "$swapfile"
+  swapon "$swapfile"
+  echo "${swapfile} none swap sw 0 0" >>/etc/fstab
+
+  # Lower swappiness to use swap less frequently
+  sysctl vm.swappiness=40
+  echo "vm.swappiness=40" >>/etc/sysctl.conf
+  sysctl vm.vfs_cache_pressure=50
+  echo "vm.vfs_cache_pressure=50" >>/etc/sysctl.conf
+}
+
 # Create a new user with a login shell
 create_login_user() {
   adduser --disabled-password --gecos "" "${user}"
   usermod -aG adm,sudo "${user}"
-  echo "${user}:${pass}" | chpasswd
+
+  if [[ -n "$pass" ]];then
+    echo "${user}:${pass}" | chpasswd
+  fi
+
   mkdir -p "/home/${user}/.ssh"
 
   # Copy root ssh authorized keys
@@ -214,6 +253,8 @@ configure
 
 install_base_packages
 install_additional_packages
+setup_swap
+
 configure_ssh
 setup_firewall
 create_login_user
